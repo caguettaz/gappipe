@@ -39,25 +39,32 @@ class FactoredArray():
         if isinstance(key, int):
             if key < 0:
                 key = len(self) + key
-            if key < 0 or key > len(self):
+            if key < 0 or key >= len(self):
                 raise IndexError
 
             key = slice(key, key + 1)
             unwrap = True
 
-        if key.start < 0:
-            key.start = self._length - key.start
-        if key.stop < 0:
-            key.stop = self._length - key.stop
         assert (key.step in (1, None))
+        start, stop = key.start, key.stop
+
+        if start is None:
+            start = 0
+        elif start < 0:
+            start = self._length + start
+
+        if stop is None:
+            stop = len(self)
+        elif stop < 0:
+            stop = self._length + stop
 
         offset = 0
         item_it = iter(self._items)
 
         res = FactoredArray()
 
-        while offset < key.start:
-            delta = key.start - offset
+        while offset < start:
+            delta = start - offset
 
             try:
                 item = next(item_it)
@@ -73,7 +80,7 @@ class FactoredArray():
             res._length += tail_len
             break
 
-        while offset < key.stop:
+        while offset < stop:
             try:
                 item = next(item_it)
             except BaseException:
@@ -83,13 +90,37 @@ class FactoredArray():
             res._length += len(item)
             offset += len(item)
 
-        if offset > key.stop:
-            res._items[-1].length -= (offset - key.stop)
+        if offset > stop:
+            delta = offset - stop
+            res._items[-1].length -= delta
+            res._length -= delta
 
         return res if not unwrap else res._items[0].val
 
     def __len__(self):
         return self._length
+
+    def __iter__(self):
+        for item in self._items:
+            for _ in range(len(item)):
+                yield item.val
+
+    class Chunks():
+        def __init__(self, owner) -> None:
+            self.owner = owner
+
+        def __iter__(self):
+            for item in self.owner._items:
+                yield (item.val, len(item))
+
+    def chunks(self):
+        return FactoredArray.Chunks(self)
+
+    def __str__(self) -> str:
+        res = f"{self.__class__.__name__}("
+        res += ', '.join(str(c) for c in self.chunks())
+        res += ')'
+        return res
 
 
 class TaggedBytes():
